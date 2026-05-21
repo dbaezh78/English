@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor de CSV - Carpeta doc</title>
+    <!-- Tailwind CSS para un diseño limpio y moderno -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        /* Estilo personalizado para la barra de desplazamiento */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
+
+    <!-- Encabezado -->
+    <header class="bg-white border-b border-slate-200 py-4 px-6 shadow-xs">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-xl font-bold text-slate-900">Visor de Archivos CSV</h1>
+                <p class="text-xs text-slate-500">Selecciona tu carpeta "doc" para listar y leer su contenido</p>
+            </div>
+            
+            <!-- Botón para cargar la carpeta -->
+            <label class="bg-indigo-650 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg shadow-sm cursor-pointer transition-colors duration-200 flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5M5 19v-2a2 2 0 00-2-2H3m14 0a2 2 0 002-2V8a2 2 0 00-2-2h-3l-2-2H9a2 2 0 00-2 2v2"></path></svg>
+                Cargar carpeta "doc"
+                <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
+            </label>
+        </div>
+    </header>
+
+    <!-- Contenedor Principal -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 flex flex-col md:flex-row gap-6 overflow-hidden">
+        
+        <!-- Panel Izquierdo: Lista de Archivos -->
+        <section class="w-full md:w-80 bg-white border border-slate-200 rounded-xl shadow-xs flex flex-col overflow-hidden shrink-0">
+            <div class="p-4 border-b border-slate-100 bg-slate-50/70 flex justify-between items-center">
+                <h2 class="font-semibold text-slate-700 text-sm tracking-wide uppercase">Archivos Detectados</h2>
+                <span id="fileCount" class="bg-slate-200 text-slate-700 text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+            </div>
+            <div id="fileList" class="divide-y divide-slate-100 overflow-y-auto flex-1 max-h-[300px] md:max-h-full">
+                <p class="text-slate-400 text-sm p-4 text-center italic">No se ha cargado ninguna carpeta aún.</p>
+            </div>
+        </section>
+
+        <!-- Panel Derecho: Contenido del CSV -->
+        <section class="flex-1 bg-white border border-slate-200 rounded-xl shadow-xs flex flex-col overflow-hidden">
+            <div class="p-4 border-b border-slate-100 bg-slate-50/70 flex justify-between items-center shrink-0">
+                <h2 id="currentFileName" class="font-semibold text-slate-800 truncate text-sm sm:text-base">Contenido del Archivo</h2>
+                <button id="clearView" class="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 hidden">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <!-- Vista de Tabla / Mensaje Inicial -->
+            <div id="tableContainer" class="flex-1 overflow-auto p-4">
+                <div class="h-full flex flex-col items-center justify-center text-slate-400 p-8 text-center">
+                    <svg class="w-16 h-16 text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    <p class="text-sm">Selecciona un archivo .csv de la lista lateral para visualizar sus datos aquí de forma estructurada.</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- JavaScript Lógica -->
+    <script>
+        const folderInput = document.getElementById('folderInput');
+        const fileList = document.getElementById('fileList');
+        const fileCount = document.getElementById('fileCount');
+        const currentFileName = document.getElementById('currentFileName');
+        const tableContainer = document.getElementById('tableContainer');
+        const clearView = document.getElementById('clearView');
+
+        let csvFilesMap = new Map(); // Almacena las referencias de los archivos indexados por nombre
+
+        // Listener para la captura de la carpeta
+        folderInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            fileList.innerHTML = '';
+            csvFilesMap.clear();
+            let count = 0;
+
+            for (let file of files) {
+                // Filtramos estrictamente por extensión .csv
+                if (file.name.toLowerCase().endsWith('.csv')) {
+                    count++;
+                    csvFilesMap.set(file.name, file);
+
+                    // Crear elemento en la lista lateral
+                    const fileItem = document.createElement('button');
+                    fileItem.className = "w-full text-left px-4 py-3 text-sm text-slate-600 hover:bg-indigo-50/50 hover:text-indigo-600 transition-all duration-150 flex items-center gap-3 border-l-2 border-transparent focus:outline-none";
+                    fileItem.innerHTML = `
+                        <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <span class="truncate font-medium">${file.name}</span>
+                    `;
+
+                    // Evento al hacer clic en un archivo de la lista
+                    fileItem.addEventListener('click', () => {
+                        // Resaltar elemento seleccionado
+                        document.querySelectorAll('#fileList button').forEach(btn => btn.classList.remove('bg-indigo-50', 'text-indigo-600', 'border-indigo-500'));
+                        fileItem.classList.add('bg-indigo-50', 'text-indigo-600', 'border-indigo-500');
+                        
+                        leerYMostrarCSV(file);
+                    });
+
+                    fileList.appendChild(fileItem);
+                }
+            }
+
+            fileCount.textContent = count;
+
+            if (count === 0) {
+                fileList.innerHTML = `<p class="text-amber-600 text-sm p-4 text-center italic bg-amber-50">No se encontraron archivos .csv en la carpeta seleccionada.</p>`;
+            }
+        });
+
+        // Función para procesar y renderizar el CSV seleccionado
+        function leerYMostrarCSV(file) {
+            currentFileName.textContent = `Visualizando: ${file.name}`;
+            clearView.classList.remove('hidden');
+            tableContainer.innerHTML = '<div class="h-full flex items-center justify-center text-slate-400 text-sm">Procesando datos del archivo...</div>';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lineas = text.split(/\r?\n/);
+                
+                if (lineas.length === 0 || lineas[0].trim() === "") {
+                    tableContainer.innerHTML = '<div class="h-full flex items-center justify-center text-amber-600 text-sm">El archivo está vacío.</div>';
+                    return;
+                }
+
+                // Construcción de la tabla estructurada
+                let htmlTabla = `<div class="inline-block min-w-full align-middle border border-slate-200 rounded-lg overflow-hidden shadow-xs">
+                                    <table class="min-w-full divide-y divide-slate-200 text-left text-xs sm:text-sm">`;
+
+                // Procesamos las filas cuidando comas comunes dentro de comillas si las hay
+                lineas.forEach((linea, index) => {
+                    if (linea.trim() === "") return; // Ignorar líneas vacías al final
+
+                    // Split simple por comas (se puede sofisticar si usas datos con comas internas en comillas)
+                    const columnas = linea.split(',');
+                    
+                    if (index === 0) {
+                        // Fila de encabezado (Header)
+                        htmlTabla += `<thead class="bg-slate-100 font-semibold text-slate-700"><tr>`;
+                        columnas.forEach(col => {
+                            htmlTabla += `<th class="px-4 py-3 tracking-wide">${limpiarComillas(col)}</th>`;
+                        });
+                        htmlTabla += `</tr></thead><tbody class="divide-y divide-slate-200 bg-white text-slate-600">`;
+                    } else {
+                        // Filas de datos (Body)
+                        htmlTabla += `<tr class="hover:bg-slate-50/80 transition-colors">`;
+                        columnas.forEach(col => {
+                            htmlTabla += `<td class="px-4 py-2.5 whitespace-nowrap border-r border-slate-100 last:border-r-0">${limpiarComillas(col)}</td>`;
+                        });
+                        htmlTabla += `</tr>`;
+                    }
+                });
+
+                htmlTabla += `</tbody></table></div>`;
+                tableContainer.innerHTML = htmlTabla;
+            };
+
+            reader.readAsText(file, 'UTF-8'); // Soporta caracteres latinos correctamente
+        }
+
+        // Helper para remover comillas molestas de la conversión de Excel a CSV
+        function limpiarComillas(str) {
+            return str.replace(/^"|"$/g, '').trim();
+        }
+
+        // Botón para limpiar visor
+        clearView.addEventListener('click', () => {
+            currentFileName.textContent = 'Contenido del Archivo';
+            clearView.classList.add('hidden');
+            document.querySelectorAll('#fileList button').forEach(btn => btn.classList.remove('bg-indigo-50', 'text-indigo-600', 'border-indigo-500'));
+            tableContainer.innerHTML = `
+                <div class="h-full flex flex-col items-center justify-center text-slate-400 p-8 text-center">
+                    <svg class="w-16 h-16 text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    <p class="text-sm">Selecciona un archivo .csv de la lista lateral para visualizar sus datos aquí de forma estructurada.</p>
+                </div>`;
+        });
+    </script>
+</body>
+</html>
